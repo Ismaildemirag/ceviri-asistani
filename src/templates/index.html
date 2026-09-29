@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Çeviri Asistanı</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>🌐 Çeviri Asistanı</h1>
+    <p>Fine-tune edilmiş Gemma-3 modeli + RAG destekli çeviri ve soru-cevap</p>
+  </header>
+
+  <main id="mesaj-alani"></main>
+
+  <footer id="input-bar">
+    <button id="dosya-btn" title="Dosya ekle">📎</button>
+    <input type="file" id="dosya-input" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" hidden>
+    <button id="mik-btn" title="Sesli mesaj">🎤</button>
+    <textarea id="metin-input" placeholder="Bir şey sor ya da çevirmek istediğin metni yaz..." rows="1"></textarea>
+    <button id="gonder-btn" title="Gönder">↑</button>
+  </footer>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

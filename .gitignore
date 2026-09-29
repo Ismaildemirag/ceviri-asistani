@@ -1,0 +1,12 @@
+chroma_db/
+models/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+outputs/
+outputs_test/
+outputs_test2/
+data/*.jsonl
+data/ciktilar/
