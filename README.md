@@ -144,20 +144,22 @@ python web_app.py                 # http://localhost:5000
 ```text
 ceviri-asistani/
 ├── src/
-│   ├── web_app.py            Flask uygulaması ve API uçları
-│   ├── translate.py          yönlendirme, çeviri, özetleme
 │   ├── ai_arama.py           Groq/Gemini/Tavily istemcileri, niyet tespiti
+│   ├── belge_ceviri.py
 │   ├── belge_hafizasi.py     aktif belge indeksi
 │   ├── belge_yukle.py        PDF/DOCX/TXT okuyucu
+│   ├── cpnfig.py
 │   ├── gorsel_oku.py         OCR
-│   ├── ses_tanit.py          konuşmadan metne
-│   ├── hava_durumu.py        Open-Meteo
-│   ├── web_arama.py          DuckDuckGo yedek arama
-│   ├── rag_setup.py          ChromaDB koleksiyonları
-│   ├── hafiza_yukle.py       çeviri hafızasını veri setinden doldurur
 │   ├── hafiza_temizle.py
-│   ├── terminoloji_yukle.py
+│   ├── hafiza_yukle.py       çeviri hafızasını veri setinden doldurur
+│   ├── hava_durumu.py        Open-Meteo
 │   ├── niyet_test_calistir.py
+│   ├── rag_setup.py          ChromaDB koleksiyonları
+│   ├── ses_tanit.py          konuşmadan metne
+│   ├── terminoloji_yukle.py
+│   ├── translate.py          yönlendirme, çeviri, özetleme
+│   ├── web_app.py            Flask uygulaması ve API uçları
+│   ├── web_arama.py          DuckDuckGo yedek arama
 │   ├── static/               CSS, JS
 │   └── templates/            HTML
 ├── tests/niyet_testleri.json
