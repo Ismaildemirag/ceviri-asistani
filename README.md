@@ -99,27 +99,34 @@ Elle hazırlanmış 105 örneklik test setinde (`tests/niyet_testleri.json`) LLM
 
 Gereksinimler: NVIDIA GPU, Python 3.14 (3.14.7 ile test edildi). İlk çalıştırmada embedding, OCR ve ses modelleri otomatik indirilir, internet gerekir.
 
-git clone https://github.com/Ismaildemirag/ceviri-asistani.git
-cd ceviri-asistani
-python -m venv .venv
+`git clone https://github.com/Ismaildemirag/ceviri-asistani.git`
+
+`cd ceviri-asistani`
+
+`python -m venv .venv`
+
 .venv\Scripts\activate            # Linux/Mac: source .venv/bin/activate
 
 # 1) Önce PyTorch (GPU sürümü)
-pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+`pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128`
 
 # 2) Sonra diğer bağımlılıklar
-pip install -r requirements.txt
+`pip install -r requirements.txt`
 
 copy .env.example .env            # Linux/Mac: cp .env.example .env
 
 # .env dosyasını aç, kendi API anahtarlarını yaz
-hf download Ismaildemirag/gemma3-tr-en-ceviri --local-dir models/ceviri_modelim_v3
-cd src
-python web_app.py
+`hf download Ismaildemirag/gemma3-tr-en-ceviri --local-dir models/ceviri_modelim_v3`
+
+`cd src`
+
+`python web_app.py`
 
 Farklı CUDA sürümü için komutu https://pytorch.org/get-started/locally adresinden seç.
 
-Windows’ta Unsloth triton ister. Hata verirse pip install triton-windows.
+Windows’ta Unsloth triton ister. Hata verirse `pip install triton-windows.`
+
+
 
 
 | Değişken | Açıklama |
@@ -148,7 +155,7 @@ ceviri-asistani/
 │   ├── belge_ceviri.py
 │   ├── belge_hafizasi.py     aktif belge indeksi
 │   ├── belge_yukle.py        PDF/DOCX/TXT okuyucu
-│   ├── cpnfig.py
+│   ├── config.py
 │   ├── gorsel_oku.py         OCR
 │   ├── hafiza_temizle.py
 │   ├── hafiza_yukle.py       çeviri hafızasını veri setinden doldurur
