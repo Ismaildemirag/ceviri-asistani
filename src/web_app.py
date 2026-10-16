@@ -2,13 +2,25 @@ from flask import Flask, render_template, request, jsonify
 from pathlib import Path
 import tempfile, threading
 
-from translate import mesaji_isle, ceviri_istegi_mi, metni_cevir, soru_cevapla, ceviriyi_hafizaya_kaydet
+from translate import (
+    mesaji_isle, ceviri_istegi_mi, metni_cevir, soru_cevapla,
+    ceviriyi_hafizaya_kaydet, ozet_istegi_mi, metni_ozetle,
+)
 from belge_yukle import metni_oku
 from gorsel_oku import gorselden_metin_cikar
 from ses_tanit import sesten_metin_cikar
+from belge_hafizasi import belgeyi_indeksle
 
 MODEL_KILIDI = threading.Lock()
 app = Flask(__name__)
+
+konusma_gecmisi = []
+
+
+def gecmise_ekle(rol, icerik):
+    konusma_gecmisi.append({"rol": rol, "icerik": icerik})
+    if len(konusma_gecmisi) > 10:
+        del konusma_gecmisi[0]
 
 
 def gorsel_niyeti_belirle(not_metni: str) -> str | None:
@@ -35,7 +47,10 @@ def mesaj_gonder():
         return jsonify({"hata": "Boş mesaj"}), 400
 
     with MODEL_KILIDI:
-        cevap = mesaji_isle(metin)
+        cevap = mesaji_isle(metin, mesaj_gecmisi=konusma_gecmisi.copy())
+
+    gecmise_ekle("kullanici", metin)
+    gecmise_ekle("asistan", cevap)
     return jsonify({"cevap": cevap})
 
 
@@ -58,6 +73,8 @@ def dosya_gonder():
             if not dosya_metni.strip():
                 return jsonify({"cevap": "Görselde okunabilir bir metin bulamadım."})
 
+            belgeyi_indeksle(dosya_metni, dosya.filename)
+
             niyet = gorsel_niyeti_belirle(kullanici_notu) if kullanici_notu else "oku"
             if niyet == "cevir":
                 cevap = metni_cevir(dosya_metni)
@@ -71,11 +88,19 @@ def dosya_gonder():
         if not dosya_metni.strip():
             return jsonify({"cevap": "Bu dosyadan okunabilir bir içerik çıkaramadım."})
 
+        belgeyi_indeksle(dosya_metni, dosya.filename)
+
+        if kullanici_notu and ozet_istegi_mi(kullanici_notu):
+            cevap = metni_ozetle(dosya_metni)
+            return jsonify({"cevap": cevap})
+
         if kullanici_notu and ceviri_istegi_mi(kullanici_notu):
             cevap = metni_cevir(dosya_metni)
+        elif kullanici_notu:
+            cevap = soru_cevapla(kullanici_notu)
         else:
-            soru_girdisi = f"{kullanici_notu}\n\n{dosya_metni}" if kullanici_notu else dosya_metni
-            cevap = soru_cevapla(soru_girdisi)
+            onizleme = " ".join(dosya_metni.split()[:80])
+            cevap = f"{onizleme}...\n\nBelgeyi inceledim. Çevirmemi isteyebilirsin."
         return jsonify({"cevap": cevap})
 
 
@@ -110,4 +135,4 @@ def ceviri_duzelt():
 
 
 if __name__ == "__main__":
-    app.run(port=5000, threaded=True, use_reloader=False, debug=True)
+    app.run(port=5000, threaded=True, use_reloader=False, debug=False)

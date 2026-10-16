@@ -8,18 +8,29 @@
 </head>
 <body>
   <header>
-    <h1>🌐 Çeviri Asistanı</h1>
-    <p>Fine-tune edilmiş Gemma-3 modeli + RAG destekli çeviri ve soru-cevap</p>
+    <div class="baslik-satiri">
+      <span class="logo">🌐</span>
+      <div>
+        <h1>Çeviri Asistanı</h1>
+        <p>Türkçe-İngilizce çeviri, belge analizi ve güncel bilgi desteği</p>
+      </div>
+    </div>
   </header>
 
-  <main id="mesaj-alani"></main>
+  <main id="mesaj-alani">
+    <div class="karsilama">
+      <p>Bir metin yaz, dosya yükle ya da mikrofona konuş — hemen başlayalım.</p>
+    </div>
+  </main>
 
   <footer id="input-bar">
-    <button id="dosya-btn" title="Dosya ekle">📎</button>
-    <input type="file" id="dosya-input" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" hidden>
-    <button id="mik-btn" title="Sesli mesaj">🎤</button>
-    <textarea id="metin-input" placeholder="Bir şey sor ya da çevirmek istediğin metni yaz..." rows="1"></textarea>
-    <button id="gonder-btn" title="Gönder">↑</button>
+    <div class="input-kutusu">
+      <button id="dosya-btn" title="Dosya ekle" aria-label="Dosya ekle">📎</button>
+      <input type="file" id="dosya-input" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" hidden>
+      <textarea id="metin-input" placeholder="Bir şey sor ya da çevirmek istediğin metni yaz..." rows="1"></textarea>
+      <button id="mik-btn" title="Sesli mesaj" aria-label="Sesli mesaj">🎤</button>
+      <button id="gonder-btn" title="Gönder" aria-label="Gönder">↑</button>
+    </div>
   </footer>
 
   <script src="{{ url_for('static', filename='script.js') }}"></script>

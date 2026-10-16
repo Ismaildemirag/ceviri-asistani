@@ -1,25 +1,29 @@
 import re
+import hashlib
+import ast, operator
 from unsloth import FastLanguageModel
 import torch
 from langdetect import detect, LangDetectException
+
 from rag_setup import get_collections
 from config import LOCAL_MODEL_PATH, MAX_SEQ_LENGTH
 from web_arama import web_ara, alakali_mi, bilgi_degeri_dusuk_mu
-import hashlib
-import ast, operator
+from belge_hafizasi import belgede_ara, aktif_belge_var_mi, numarali_cumle_istegi_mi, numarali_cumleyi_getir, ham_metni_al
+from ai_arama import gelismis_arama_cevapla, niyet_belirle, llm_ozetle, llm_sohbet
+from hava_durumu import hava_durumu_getir, sehir_cikar
+
+HAVA_DESENI = re.compile(r'\b(hava|derece|sıcaklık)\b', re.IGNORECASE)
 
 _model = None
 _tokenizer = None
 
-
 YASAKLI_SCRIPT_DESENI = re.compile(
     r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af\u0900-\u097f\u0600-\u06ff\u0370-\u03ff\u0400-\u04ff]'
 )
-
 _yasakli_token_id_cache = None
 
+
 def yasakli_token_idlerini_hesapla(tokenizer):
-    """Vocab'ı bir kez tarar, yabancı alfabe içeren token ID'lerini bulur ve önbelleğe alır."""
     global _yasakli_token_id_cache
     if _yasakli_token_id_cache is None:
         vocab = tokenizer.get_vocab()
@@ -47,7 +51,6 @@ def modeli_yukle():
 
 
 def _durma_tokenlari(tokenizer):
-    """generate()'in <end_of_turn> gördüğünde de durmasını sağlar."""
     eos_ids = [tokenizer.eos_token_id]
     try:
         eot_id = tokenizer.convert_tokens_to_ids("<end_of_turn>")
@@ -66,8 +69,6 @@ def dil_algila(metin: str) -> str:
     return "tr" if kod == "tr" else "en"
 
 
-CEVIRI_DESENI = re.compile(r'\bçevir(?!men)\w*\b|\btercüme\w*\b|\btranslate\b', re.IGNORECASE)
-
 TRIGGER_SUFFIX = re.compile(
     r'\s*(bunu\s+|şunu\s+|lütfen\s+)?'
     r'(çevir(sene|iver|ir\s+misin|ebilir\s+misin|meni)?|tercüme\s+et(er\s+misin)?|translate(\s+this)?)'
@@ -77,7 +78,7 @@ TRIGGER_SUFFIX = re.compile(
 
 
 def ceviri_istegi_mi(metin: str) -> bool:
-    return bool(CEVIRI_DESENI.search(metin))
+    return bool(TRIGGER_SUFFIX.search(metin))
 
 
 def cevrilecek_icerigi_cikar(metin: str) -> str:
@@ -86,6 +87,7 @@ def cevrilecek_icerigi_cikar(metin: str) -> str:
 
 SORU_KELIMELERI = re.compile(
     r'(kimdir|kim\b|nedir|ne\b|nerede|ne zaman|kaç|hangi|nasıl|neden|niçin|'
+    r'söyle|anlat|listele|sırala|göster|bahset|açıkla|'
     r'what|who|where|when|why|how|which)',
     re.IGNORECASE
 )
@@ -97,18 +99,17 @@ SOHBET_KELIMELERI = {
 
 
 def soru_niteliginde_mi(metin: str) -> bool:
+    kelimeler = metin.strip().split()
+    if not kelimeler:
+        return False
+    kucuk = metin.lower()
+    if len(kelimeler) <= 3 and any(k in kucuk for k in SOHBET_KELIMELERI):
+        return False
     if SORU_KELIMELERI.search(metin) or metin.strip().endswith("?"):
         return True
-    kelimeler = metin.strip().split()
-    if 1 <= len(kelimeler) <= 6:
-        kucuk = metin.lower()
-        sohbet_mi = any(k in kucuk for k in SOHBET_KELIMELERI)
-        ozel_isim_var = any(k[:1].isupper() for k in kelimeler if k)
-        if not sohbet_mi and ozel_isim_var:
-            return True
+    if 1 <= len(kelimeler) <= 20:
+        return True
     return False
-
-
 
 
 _GUVENLI_OPERATORLER = {
@@ -186,7 +187,6 @@ def cevir(metin, yon="en-tr", terim_kullan=True, max_tokens=200):
         if terimler:
             baglam += "İlgili terimler:\n" + "\n".join(terimler) + "\n\n"
 
-
     girdi = f"{baglam}{metin}" if baglam else metin
     text = f"<start_of_turn>user\n{talimat}\n\n{girdi}<end_of_turn>\n<start_of_turn>model\n"
 
@@ -203,7 +203,6 @@ def cevir(metin, yon="en-tr", terim_kullan=True, max_tokens=200):
 
     ceviriyi_hafizaya_kaydet(metin, sonuc, yon)
     return sonuc
-
 
 
 def ceviriyi_hafizaya_kaydet(kaynak, hedef, yon):
@@ -269,27 +268,86 @@ def metni_cevir(metin: str, yon: str = None, ilerleme_callback=None) -> str:
     return "\n\n".join(cevrilmis_paragraflar)
 
 
-def soru_cevapla(mesaj, max_tokens=300):
-    cols = get_collections()
+OZET_DESENI = re.compile(r'\b(özetle|özet|özetler misin|kısaca anlat|kısaca özetle)\b', re.IGNORECASE)
 
+
+def ozet_istegi_mi(metin: str) -> bool:
+    return bool(OZET_DESENI.search(metin))
+
+
+def metni_ozetle(metin: str) -> str:
+    llm_sonuc = llm_ozetle(metin)
+    if llm_sonuc:
+        return llm_sonuc
+
+    model, tokenizer = modeli_yukle()
+    kisaltilmis = " ".join(metin.split()[:300])
+    text = f"<start_of_turn>user\nAşağıdaki metni 3 cümlede özetle:\n\n{kisaltilmis}<end_of_turn>\n<start_of_turn>model\n"
+    inputs = tokenizer(text, return_tensors="pt").to(model.device)
+    outputs = model.generate(
+        **inputs, max_new_tokens=150, do_sample=False,
+        eos_token_id=_durma_tokenlari(tokenizer),
+        pad_token_id=tokenizer.eos_token_id,
+        suppress_tokens=yasakli_token_idlerini_hesapla(tokenizer),
+    )
+    sonuc = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    return f"{sonuc}\n\n(Not: AI servisleri şu an meşgul, bu özet sınırlı kaliteli yerel model ile üretildi.)"
+
+
+def sohbet_cevapla(mesaj: str, mesaj_gecmisi=None, max_tokens: int = 150) -> str:
+    cevap = llm_sohbet(mesaj, mesaj_gecmisi)
+    if cevap:
+        return cevap
+
+    model, tokenizer = modeli_yukle()
+    text = f"<start_of_turn>user\n{mesaj}<end_of_turn>\n<start_of_turn>model\n"
+    inputs = tokenizer(text, return_tensors="pt").to(model.device)
+    outputs = model.generate(
+        **inputs, max_new_tokens=max_tokens, do_sample=False,
+        repetition_penalty=1.2, no_repeat_ngram_size=3,
+        eos_token_id=_durma_tokenlari(tokenizer),
+        pad_token_id=tokenizer.eos_token_id,
+        suppress_tokens=yasakli_token_idlerini_hesapla(tokenizer),
+    )
+    return tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+
+
+def soru_cevapla(mesaj, mesaj_gecmisi=None, arama_sorgusu=None, max_tokens=300):
     if matematik_ifadesi_mi(mesaj):
         sonuc = matematik_hesapla(mesaj)
         if sonuc:
             return sonuc
 
-    if soru_niteliginde_mi(mesaj):
-        belge_sonuc = cols["belgeler"].query(query_texts=[mesaj], n_results=3)
-        if belge_sonuc["documents"] and belge_sonuc["documents"][0]:
-            ilgili = [d for d, m in zip(belge_sonuc["documents"][0], belge_sonuc["distances"][0]) if m < 0.6]
-            if ilgili:
-                return f"Yüklediğin belgede bulduğum ilgili bölüm:\n\n{ilgili[0][:500]}"
+    if HAVA_DESENI.search(mesaj):
+        sehir = sehir_cikar(mesaj)
+        if sehir:
+            hava_sonuc = hava_durumu_getir(sehir)
+            if hava_sonuc:
+                return hava_sonuc
 
-        web_sonuclari_1 = web_ara(mesaj, n=5)
-        web_sonuclari_2 = web_ara(mesaj, n=5)
-        web_sonuclari = web_sonuclari_1 + web_sonuclari_2
-        web_sonuclari = [s for s in web_sonuclari if alakali_mi(mesaj, s)]
+    if aktif_belge_var_mi():
+        cumle_no = numarali_cumle_istegi_mi(mesaj)
+        if cumle_no:
+            cumle = numarali_cumleyi_getir(cumle_no)
+            if cumle:
+                return f"Belgenin {cumle_no}. cümlesi:\n\n{cumle}"
+            return f"Belgede {cumle_no}. bir cümle bulamadım."
+
+        belge_sonuclari = belgede_ara(mesaj)
+        if belge_sonuclari:
+            en_ilgili_parca = belge_sonuclari[0][0]
+            return f"Yüklediğin belgede bulduğum ilgili bölüm:\n\n{en_ilgili_parca}"
+
+    if arama_sorgusu or soru_niteliginde_mi(mesaj):
+        etkin_sorgu = arama_sorgusu or mesaj
+
+        gelismis_cevap = gelismis_arama_cevapla(mesaj, mesaj_gecmisi, arama_sorgusu=etkin_sorgu)
+        if gelismis_cevap:
+            return gelismis_cevap
+
+        web_sonuclari = web_ara(etkin_sorgu, n=5)
+        web_sonuclari = [s for s in web_sonuclari if alakali_mi(etkin_sorgu, s)]
         web_sonuclari = [s for s in web_sonuclari if not bilgi_degeri_dusuk_mu(s)]
-        web_sonuclari.sort(key=lambda s: web_sonuclari_1.count(s) + web_sonuclari_2.count(s) > 1, reverse=True)
 
         wiki_sonuclari = [s for s in web_sonuclari if "vikipedi" in s.lower() or "wikipedia" in s.lower()]
         if wiki_sonuclari:
@@ -300,24 +358,134 @@ def soru_cevapla(mesaj, max_tokens=300):
         else:
             return "Bu konuda güvenilir bir bilgi bulamadım."
 
-    model, tokenizer = modeli_yukle()
-    text = f"<start_of_turn>user\n{mesaj}<end_of_turn>\n<start_of_turn>model\n"
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=max_tokens,
-        do_sample=False,
-        eos_token_id=_durma_tokenlari(tokenizer),
-        pad_token_id=tokenizer.eos_token_id,
-        suppress_tokens=yasakli_token_idlerini_hesapla(tokenizer),
-    )
-    return tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    return sohbet_cevapla(mesaj, mesaj_gecmisi)
 
 
-def mesaji_isle(metin: str) -> str:
+_TAKIP_SORUSU_DESENI = re.compile(
+    r"^(?:daha\s+fazla(?:\s+(?:açıkla|anlat|bilgi\s+ver))?|"
+    r"biraz\s+daha(?:\s+(?:açıkla|anlat|anlatır\s+mısın))?|"
+    r"devam\s+et|devam\s+etsene|"
+    r"en\s+iyisi\s+hangisiydi|hangisi\s+daha\s+iyi(?:ydi)?|"
+    r"peki\s+ya\s+.+|neden|niçin|nasıl\s+yani|"
+    r"bunu\s+(?:açıkla|anlat|detaylandır)|"
+    r"hepsini\s+(?:söyle|anlat|listele)|"
+    r"biraz\s+daha\s+detay(?:lı)?(?:\s+anlat)?)[.!?…]*$",
+    re.IGNORECASE,
+)
+
+
+def _takip_sorusu_sorgusu(metin: str, mesaj_gecmisi=None):
+    """Kısa takip sorusunu son bağımsız kullanıcı konusuna bağlar."""
+    temiz = metin.strip()
+    if not temiz or len(temiz.split()) > 8 or ceviri_istegi_mi(temiz):
+        return None
+    if not _TAKIP_SORUSU_DESENI.fullmatch(temiz):
+        return None
+    for kayit in reversed(mesaj_gecmisi or []):
+        if kayit.get("rol") != "kullanici":
+            continue
+        onceki = (kayit.get("icerik") or "").strip()
+        if not onceki or ceviri_istegi_mi(onceki):
+            continue
+        if _TAKIP_SORUSU_DESENI.fullmatch(onceki):
+            continue
+        return f"{onceki[:180]} {temiz}"
+    return None
+
+
+def mesaji_isle(metin: str, mesaj_gecmisi=None) -> str:
+    # Belge/görsel çevirisi ve özetleme isteklerini mevcut akışta bırak.
+    if not aktif_belge_var_mi() or not (ceviri_istegi_mi(metin) or ozet_istegi_mi(metin)):
+        baglamli_sorgu = _takip_sorusu_sorgusu(metin, mesaj_gecmisi)
+        if baglamli_sorgu:
+            return soru_cevapla(metin, mesaj_gecmisi=mesaj_gecmisi, arama_sorgusu=baglamli_sorgu)
+
+    niyet_sonuc = niyet_belirle(metin, mesaj_gecmisi, belge_aktif=aktif_belge_var_mi())
+
+    if niyet_sonuc:
+        niyet = niyet_sonuc.get("niyet")
+        icerik = (niyet_sonuc.get("icerik") or metin).strip()
+
+        if niyet == "ceviri":
+            if aktif_belge_var_mi():
+                cumle_no = numarali_cumle_istegi_mi(metin)
+                if cumle_no:
+                    cumle = numarali_cumleyi_getir(cumle_no)
+                    if cumle:
+                        return metni_cevir(cumle) 
+                    return f"Belgede {cumle_no}. bir cümle bulamadım."
+
+                if len(metin.split()) <= 4 or not icerik:
+                    tam_metin = ham_metni_al()
+                    if tam_metin:
+                        return metni_cevir(tam_metin)
+
+            if icerik:
+                return metni_cevir(icerik)
+
+            return "Çevirmemi istediğin metni de yazar mısın?"
+
+        if niyet == "ozet":
+            if aktif_belge_var_mi() and len(icerik.split()) < 15:
+                tam_metin = ham_metni_al()
+                if tam_metin:
+                    return metni_ozetle(tam_metin)
+
+            if len(icerik.split()) >= 15:
+                return metni_ozetle(icerik)
+
+            if ozet_istegi_mi(metin) and mesaj_gecmisi:
+                son_cevaplar = [m["icerik"] for m in mesaj_gecmisi if m["rol"] == "asistan"]
+                if son_cevaplar:
+                    return metni_ozetle(son_cevaplar[-1])
+
+            return soru_cevapla(metin, mesaj_gecmisi=mesaj_gecmisi)
+
+        if niyet == "hava_durumu":
+            sehir = (niyet_sonuc.get("sehir") or "").strip() or sehir_cikar(metin)
+            if sehir:
+                hava_sonuc = hava_durumu_getir(sehir)
+                if hava_sonuc:
+                    return hava_sonuc
+
+        if niyet == "sohbet":
+            return sohbet_cevapla(metin, mesaj_gecmisi)
+
+        if niyet == "matematik":
+            sonuc = matematik_hesapla(metin)
+            if sonuc:
+                return sonuc
+
+        if niyet == "soru_cevap":
+            arama_sorgusu = (niyet_sonuc.get("arama_sorgusu") or "").strip() or None
+            return soru_cevapla(metin, mesaj_gecmisi=mesaj_gecmisi, arama_sorgusu=arama_sorgusu)
+
+    if aktif_belge_var_mi():
+        cumle_no = numarali_cumle_istegi_mi(metin)
+        if cumle_no and ceviri_istegi_mi(metin):
+            cumle = numarali_cumleyi_getir(cumle_no)
+            if cumle:
+                return metni_cevir(cumle)
+            return f"Belgede {cumle_no}. bir cümle bulamadım."
+
+        if ozet_istegi_mi(metin):
+            tam_metin = ham_metni_al()
+            if tam_metin:
+                return metni_ozetle(tam_metin)
+
+        if ceviri_istegi_mi(metin) and re.search(r'\b(belge|belgeyi|metni|metnin|dosyayı)\b', metin.lower()):
+            tam_metin = ham_metni_al()
+            if tam_metin:
+                return metni_cevir(tam_metin)
+
     if ceviri_istegi_mi(metin):
         icerik = cevrilecek_icerigi_cikar(metin)
+        if not icerik and aktif_belge_var_mi():
+            tam_metin = ham_metni_al()
+            if tam_metin:
+                return metni_cevir(tam_metin)
         if not icerik:
             return "Çevirmemi istediğin metni de yazar mısın?"
         return metni_cevir(icerik)
-    return soru_cevapla(metin)
+
+    return soru_cevapla(metin, mesaj_gecmisi=mesaj_gecmisi)

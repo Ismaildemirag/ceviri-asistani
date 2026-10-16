@@ -7,24 +7,58 @@ const mikBtn = document.getElementById("mik-btn");
 
 let secilenDosya = null;
 
+function asagiKaydir() {
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+}
+
+function kacis(metin) {
+  const d = document.createElement("div");
+  d.textContent = metin;
+  return d.innerHTML;
+}
+
+function basitMarkdown(metin) {
+  let g = kacis(metin);
+  g = g.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  g = g.replace(/(https?:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return g;
+}
+
+function karsilamaKaldir() {
+  const k = mesajAlani.querySelector(".karsilama");
+  if (k) k.remove();
+}
+
 function mesajEkle(metin, kimden) {
-  const div = document.createElement("div");
-  div.className = `mesaj ${kimden}`;
-  div.textContent = metin;
-  mesajAlani.appendChild(div);
-  mesajAlani.scrollTop = mesajAlani.scrollHeight;
+  karsilamaKaldir();
+  const satir = document.createElement("div");
+  satir.className = `mesaj-satiri ${kimden}`;
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = kimden === "kullanici" ? "S" : "AI";
+
+  const balon = document.createElement("div");
+  balon.className = "mesaj";
+  balon.innerHTML = basitMarkdown(metin);
+
+  satir.appendChild(avatar);
+  satir.appendChild(balon);
+  mesajAlani.appendChild(satir);
+  asagiKaydir();
+  return balon;
+}
+
+function yaziyorGoster() {
+  const balon = mesajEkle("", "asistan");
+  balon.innerHTML = '<div class="yaziyor"><span></span><span></span><span></span></div>';
+  return balon;
 }
 
 metinInput.addEventListener("input", () => {
   metinInput.style.height = "auto";
   metinInput.style.height = metinInput.scrollHeight + "px";
 });
-
-function durumTahminEt(metin) {
-  const kucuk = metin.toLowerCase();
-  if (/çevir|tercüme|translate/.test(kucuk)) return "Çevriliyor...";
-  return "Düşünüyor...";
-}
 
 async function gonder() {
   const metin = metinInput.value.trim();
@@ -39,12 +73,7 @@ async function gonder() {
     metinInput.value = "";
     metinInput.style.height = "auto";
 
-    const uzanti = dosya.name.split(".").pop().toLowerCase();
-    let durumMesaji = ["png", "jpg", "jpeg"].includes(uzanti) ? "Görsel okunuyor..." : "Belge inceleniyor...";
-    if (/çevir|tercüme|translate/.test(metin.toLowerCase())) durumMesaji = "Çevriliyor...";
-
-    mesajEkle(durumMesaji, "asistan");
-    const yukleniyorEl = mesajAlani.lastChild;
+    const balon = yaziyorGoster();
 
     const formData = new FormData();
     formData.append("dosya", dosya);
@@ -52,7 +81,8 @@ async function gonder() {
 
     const yanit = await fetch("/api/dosya", { method: "POST", body: formData });
     const veri = await yanit.json();
-    yukleniyorEl.textContent = veri.cevap || veri.hata;
+    balon.innerHTML = basitMarkdown(veri.cevap || veri.hata || "Bir şeyler ters gitti.");
+    asagiKaydir();
     return;
   }
 
@@ -61,8 +91,7 @@ async function gonder() {
   metinInput.value = "";
   metinInput.style.height = "auto";
 
-  mesajEkle(durumTahminEt(metin), "asistan");
-  const yukleniyorEl = mesajAlani.lastChild;
+  const balon = yaziyorGoster();
 
   const yanit = await fetch("/api/mesaj", {
     method: "POST",
@@ -70,7 +99,8 @@ async function gonder() {
     body: JSON.stringify({ metin }),
   });
   const veri = await yanit.json();
-  yukleniyorEl.textContent = veri.cevap || veri.hata;
+  balon.innerHTML = basitMarkdown(veri.cevap || veri.hata || "Bir şeyler ters gitti.");
+  asagiKaydir();
 }
 
 gonderBtn.addEventListener("click", gonder);
@@ -86,11 +116,10 @@ dosyaInput.addEventListener("change", () => {
   const dosya = dosyaInput.files[0];
   if (!dosya) return;
   secilenDosya = dosya;
-  dosyaBtn.textContent = "📎✓";  // dosya seçildiğini görsel olarak belirt
+  dosyaBtn.textContent = "📎✓";
   metinInput.focus();
 });
 
-// --- Mikrofon (aynı kalıyor) ---
 let mediaRecorder, kayitParcalari = [];
 
 mikBtn.addEventListener("click", async () => {
