@@ -97,9 +97,9 @@ Elle hazırlanmış 105 örneklik test setinde (`tests/niyet_testleri.json`) LLM
 
 ## Kurulum
 
-Gereksinimler: NVIDIA GPU, Python(3.14.7). İlk çalıştırmada embedding, OCR ve ses modelleri otomatik indirilir, internet gerekir.
+Gereksinimler: NVIDIA GPU, Python 3.14 (3.14.7 ile test edildi). İlk çalıştırmada embedding, OCR ve ses modelleri otomatik indirilir, internet gerekir.
 
-#git clone https://github.com/Ismaildemirag/ceviri-asistani.git
+git clone https://github.com/Ismaildemirag/ceviri-asistani.git
 cd ceviri-asistani
 python -m venv .venv
 .venv\Scripts\activate            # Linux/Mac: source .venv/bin/activate
@@ -112,6 +112,10 @@ pip install -r requirements.txt
 
 copy .env.example .env            # Linux/Mac: cp .env.example .env
 
+# .env dosyasını aç, kendi API anahtarlarını yaz
+hf download Ismaildemirag/gemma3-tr-en-ceviri --local-dir models/ceviri_modelim_v3
+cd src
+python web_app.py
 
 Farklı CUDA sürümü için komutu https://pytorch.org/get-started/locally adresinden seç.
 
