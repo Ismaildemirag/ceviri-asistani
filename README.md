@@ -105,7 +105,8 @@ Gereksinimler: NVIDIA GPU, Python 3.14 (3.14.7 ile test edildi). İlk çalışt�
 
 `python -m venv .venv`
 
-.venv\Scripts\activate            # Linux/Mac: source .venv/bin/activate
+`.venv\Scripts\activate`            
+`# Linux/Mac: source .venv/bin/activate`
 
 # 1) Önce PyTorch (GPU sürümü)
 `pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128`
@@ -113,20 +114,21 @@ Gereksinimler: NVIDIA GPU, Python 3.14 (3.14.7 ile test edildi). İlk çalışt�
 # 2) Sonra diğer bağımlılıklar
 `pip install -r requirements.txt`
 
-copy .env.example .env            # Linux/Mac: cp .env.example .env
+# 3) API anahtarları için .env dosyasını oluştur
+`copy .env.example .env`            
+`# Linux/Mac: cp .env.example .env`
 
-# .env dosyasını aç, kendi API anahtarlarını yaz
+# 4) Çeviri modelini (LoRA adaptörü) indir
 `hf download Ismaildemirag/gemma3-tr-en-ceviri --local-dir models/ceviri_modelim_v3`
 
-`cd src`
-
-`python web_app.py`
 
 Farklı CUDA sürümü için komutu https://pytorch.org/get-started/locally adresinden seç.
 
 Windows’ta Unsloth triton ister. Hata verirse `pip install triton-windows.`
 
+## API anahtarları
 
+`.env` dosyasını açıp `your_..._here` yazan yerlere kendi anahtarlarınızı yazın (tırnak veya boşluk kullanmayın). `.env` dosyası `.gitignore` içindedir, depoya gönderilmez.
 
 
 | Değişken | Açıklama |
